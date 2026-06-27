@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "screening-agent"
+version = "0.1.0"
+description = "Conversational candidate screening agent for delivery-driver hiring"
+requires-python = ">=3.11"
+dependencies = [
+    "anthropic>=0.40",
+    "groq>=0.11",
+    "pydantic>=2.6",
+    "pydantic-settings>=2.2",
+    "sqlalchemy>=2.0",
+    "rapidfuzz>=3.6",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0"]
+
+[project.scripts]
+screening = "src.main:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["src*"]

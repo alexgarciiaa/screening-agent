@@ -1,0 +1,170 @@
+from ..config import get_settings
+from ..fsm.enums import Action, Language, Stage
+from ..fsm.flow import Decision, next_missing_stage
+from ..fsm.models import CandidateProfile, ConversationState
+
+SYSTEM_UNDERSTAND = """\
+You read one message from a candidate applying to be a delivery driver and \
+return structured data.
+
+Extract only the information explicitly present in the candidate's latest \
+message. Leave every other field null; do not guess or carry over earlier \
+answers. Detect the language of that message (es or en), classify the intent \
+(answer, question, chitchat, stop, unclear) and the sentiment (neutral, \
+positive, frustrated, confused).
+
+Guidance:
+- has_license is false only if the candidate clearly states they have no \
+driving licence.
+- city is the city or zone exactly as the candidate writes it.
+- experience_years is a number; experience_platforms lists named apps \
+(Glovo, Uber Eats, Rappi, ...).
+- consent is true/false only when the candidate answers the consent question.
+- confirmation is true if the candidate agrees the summary is correct, false if \
+they want to change something; otherwise null.
+- If the message is gibberish or impossible to interpret, set intent to unclear.
+"""
+
+SYSTEM_REPLY = """\
+You are the hiring assistant for Grupo Sazon, a restaurant chain, screening \
+candidates for delivery-driver roles over messaging.
+
+Style:
+- Write in the candidate's language (Spanish or English) and match their \
+register, including Spain vs Mexico variants.
+- This is chat, not email: one short message, one question at a time, warm \
+and human. A light emoji is fine, never more than one.
+- Acknowledge the candidate's previous answer briefly before moving on.
+- Never invent salary, schedules or commitments; defer specifics to the \
+recruiter.
+- Follow the given task exactly and send only that one message. After the \
+first message never greet again, never restart the screening, and never \
+re-ask something already answered.
+
+Output only the message to send. No labels, no quotes, no notes.
+"""
+
+_ASK_DIRECTIVES: dict[Stage, str] = {
+    Stage.CONSENT: (
+        "Greet the candidate, say this is a quick screening for the "
+        "delivery-driver role (about 2 minutes), and ask if they are happy to "
+        "continue."
+    ),
+    Stage.NAME: "Ask for the candidate's full name.",
+    Stage.LICENSE: "Ask whether the candidate holds a valid driving licence.",
+    Stage.CITY: "Ask in which city or zone the candidate wants to work.",
+    Stage.AVAILABILITY: (
+        "Ask about availability: full-time, part-time or weekends."
+    ),
+    Stage.SCHEDULE: (
+        "Ask about preferred schedule: morning, afternoon, evening or flexible."
+    ),
+    Stage.EXPERIENCE: (
+        "Ask about prior delivery experience: how many years and on which "
+        "platforms (Glovo, Uber Eats, Rappi...)."
+    ),
+    Stage.START_DATE: "Ask when the candidate could start.",
+}
+
+_CLOSE_DIRECTIVES: dict[Action, str] = {
+    Action.CLOSE_QUALIFIED: (
+        "Thank the candidate warmly, confirm their profile looks like a good "
+        "fit, and tell them a recruiter will contact them shortly to continue"
+    ),
+    Action.CLOSE_DISQUALIFIED_NO_LICENSE: (
+        "Kindly explain that a valid driving licence is required for this role, "
+        "so you cannot continue for now, and that they are welcome to re-apply "
+        "if that changes."
+    ),
+    Action.CLOSE_OUT_OF_AREA: (
+        "Explain that Grupo Sazon does not operate in their area yet, offer to "
+        "keep their details for when it expands there, and thank them."
+    ),
+    Action.CLOSE_CONSENT_DECLINED: (
+        "Respectfully acknowledge that they prefer not to continue and wish "
+        "them well."
+    ),
+    Action.CLOSE_OPTED_OUT: (
+        "Confirm that you will stop here and that they can reply anytime to "
+        "pick up again."
+    ),
+}
+
+
+def format_transcript(state: ConversationState, limit: int | None = None) -> str:
+    limit = limit or get_settings().history_turns_in_context
+    recent = state.messages[-limit:]
+    lines = [f"{m.role.capitalize()}: {m.text}" for m in recent]
+    return "\n".join(lines)
+
+
+def profile_summary(profile: CandidateProfile) -> str:
+    known: list[str] = []
+    if profile.full_name:
+        known.append(f"name={profile.full_name}")
+    if profile.has_license is not None:
+        known.append(f"licence={'yes' if profile.has_license else 'no'}")
+    if profile.city:
+        known.append(f"city={profile.city}")
+    if profile.availability:
+        known.append(f"availability={profile.availability.value}")
+    if profile.preferred_schedule:
+        known.append(f"schedule={profile.preferred_schedule.value}")
+    if profile.experience.years is not None:
+        platforms = ", ".join(profile.experience.platforms) or "none"
+        known.append(f"experience={profile.experience.years}y ({platforms})")
+    if profile.start_date_text:
+        known.append(f"start={profile.start_date_text}")
+    return "; ".join(known) if known else "nothing yet"
+
+
+def understand_user_message(state: ConversationState) -> str:
+    pending = next_missing_stage(state.profile)
+    asked_about = pending.value if pending else "confirming the summary"
+    return (
+        "Conversation so far:\n"
+        f"{format_transcript(state)}\n\n"
+        f"The assistant's last question was about: {asked_about}.\n"
+        "Classify the candidate's latest message and extract any fields it "
+        "provides. If it answers the question above, fill that field."
+    )
+
+
+def _directive(state: ConversationState, decision: Decision) -> str:
+    if decision.action is Action.ASK and decision.stage is not None:
+        return _ASK_DIRECTIVES[decision.stage]
+    if decision.action is Action.CLARIFY and decision.stage is Stage.SUMMARY:
+        return (
+            "The candidate says the summary is not correct. Ask warmly which "
+            "detail they would like to change."
+        )
+    if decision.action is Action.CLARIFY and decision.stage is not None:
+        return (
+            "The previous answer was unclear. Re-ask, more concretely and with "
+            f"example options. {_ASK_DIRECTIVES[decision.stage]}"
+        )
+    if decision.action is Action.ANSWER_QUESTION:
+        pending = next_missing_stage(state.profile)
+        follow_up = _ASK_DIRECTIVES.get(pending, "") if pending else ""
+        return (
+            "Answer the candidate's question briefly and honestly with general "
+            "information, deferring specifics to the recruiter. Then continue: "
+            f"{follow_up}"
+        )
+    if decision.action is Action.CONFIRM_SUMMARY:
+        return (
+            "Summarise the collected information in one short message and ask "
+            "the candidate to confirm it is correct."
+        )
+    return _CLOSE_DIRECTIVES.get(decision.action, "Reply politely.")
+
+
+def reply_user_message(state: ConversationState, decision: Decision) -> str:
+    language = "Spanish" if state.language is Language.ES else "English"
+    return (
+        f"Task (do exactly this, nothing else): {_directive(state, decision)}\n\n"
+        f"Already known, do not ask again: {profile_summary(state.profile)}\n\n"
+        "Recent messages:\n"
+        f"{format_transcript(state, limit=4)}\n\n"
+        f"Write one short message in {language}."
+    )
