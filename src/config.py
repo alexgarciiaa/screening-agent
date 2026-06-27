@@ -8,6 +8,7 @@ class Settings(BaseSettings):
 
     anthropic_api_key: str | None = None
     groq_api_key: str | None = None
+    telegram_bot_token: str = ""
     database_url: str = "sqlite:///screening.db"
 
     # Anthropic routing: cheap model for understanding and simple replies,

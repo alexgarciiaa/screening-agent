@@ -1,0 +1,11 @@
+.git
+.venv
+venv
+__pycache__
+*.pyc
+*.db
+.env
+docs
+demos
+tests
+bot_qr.svg
