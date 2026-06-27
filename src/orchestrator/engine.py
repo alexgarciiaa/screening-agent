@@ -21,9 +21,9 @@ _ESCALATING_ACTIONS = {Action.CONFIRM_SUMMARY, Action.CLOSE_QUALIFIED}
 @dataclass
 class AgentTurn:
     reply: str
-    decision: Decision
     outcome: Outcome
     finished: bool
+    decision: Decision | None = None
 
 
 class ScreeningEngine:
@@ -44,6 +44,9 @@ class ScreeningEngine:
         modality: Modality = Modality.TEXT,
         transcription_confidence: float | None = None,
     ) -> AgentTurn:
+        if state.outcome in TERMINAL_OUTCOMES:
+            return AgentTurn(reply="", outcome=state.outcome, finished=True)
+
         state.add_message("candidate", text, modality, transcription_confidence)
 
         understanding = self._provider.understand(state)

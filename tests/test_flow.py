@@ -4,6 +4,7 @@ from src.config import Settings
 from src.fsm.enums import Outcome
 from src.fsm.models import ConversationState
 from src.orchestrator.engine import ScreeningEngine
+from src.orchestrator.handoff import build_handoff
 from src.storage.repository import ConversationRepository
 
 
@@ -94,3 +95,48 @@ def test_summary_rejection_keeps_consent_and_stays_open():
     engine.handle(state, "no")
     assert state.outcome is Outcome.IN_PROGRESS
     assert state.profile.consent is True
+
+
+def test_terminal_outcome_is_absorbing():
+    engine, state = make_engine(), new_state()
+    run(engine, state, ["si", "Pedro", "no"])
+    assert state.outcome is Outcome.DISQUALIFIED_NO_LICENSE
+
+    before = len(state.messages)
+    turn = engine.handle(state, "y esto que?")
+    assert turn.finished is True
+    assert state.outcome is Outcome.DISQUALIFIED_NO_LICENSE
+    assert len(state.messages) == before
+
+
+def test_handoff_qualified():
+    engine, state = make_engine(), new_state()
+    run(
+        engine,
+        state,
+        [
+            "si",
+            "Laura Gomez",
+            "si",
+            "Madrid",
+            "jornada completa",
+            "por la manana",
+            "2 anos en Glovo",
+            "el lunes",
+            "si",
+        ],
+    )
+    handoff = build_handoff(state)
+    assert handoff.qualified is True
+    assert handoff.outcome is Outcome.QUALIFIED
+    assert "Laura Gomez" in handoff.summary
+    assert "entrevista" in handoff.recommended_action.lower()
+
+
+def test_handoff_disqualified():
+    engine, state = make_engine(), new_state()
+    run(engine, state, ["si", "Pedro", "no"])
+    handoff = build_handoff(state)
+    assert handoff.qualified is False
+    assert handoff.outcome is Outcome.DISQUALIFIED_NO_LICENSE
+    assert "carnet" in handoff.recommended_action.lower()

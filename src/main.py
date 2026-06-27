@@ -4,6 +4,7 @@ from .config import get_settings
 from .fsm.enums import TERMINAL_OUTCOMES
 from .agents.provider import build_provider
 from .orchestrator.engine import ScreeningEngine
+from .orchestrator.handoff import build_handoff
 from .storage.repository import ConversationRepository
 
 
@@ -46,7 +47,9 @@ def main() -> None:
         repository.save(state)
         print(f"\nAgent: {turn.reply}\n")
 
-    print(f"[conversation closed: {state.outcome.value}]")
+    print(f"[conversation closed: {state.outcome.value}]\n")
+    print("Recruiter handoff:")
+    print(build_handoff(state).model_dump_json(indent=2))
 
 
 if __name__ == "__main__":
