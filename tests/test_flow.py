@@ -163,6 +163,74 @@ def test_summary_rejection_keeps_consent_and_stays_open():
     assert state.profile.consent is True
 
 
+def test_start_sets_last_asked_stage():
+    engine, state = make_engine(), new_state()
+    engine.start(state)
+    from src.fsm.enums import Stage
+
+    assert state.last_asked_stage is Stage.CONSENT
+
+
+def test_wrong_stage_field_is_ignored():
+    from src.agents.schemas import TurnUnderstanding
+    from src.fsm.enums import Intent, Language, Sentiment, Stage
+    from src.fsm.models import CandidateProfile
+    from src.orchestrator.validation import apply_understanding
+
+    profile = CandidateProfile(consent=True)
+    understanding = TurnUnderstanding(
+        language=Language.ES,
+        intent=Intent.ANSWER,
+        sentiment=Sentiment.NEUTRAL,
+        city="Madrid",
+    )
+    apply_understanding(profile, understanding, pending=Stage.NAME)
+    assert profile.city is None
+
+
+def test_multi_field_message_is_accepted():
+    from src.agents.schemas import TurnUnderstanding
+    from src.fsm.enums import Intent, Language, Sentiment, Stage
+    from src.fsm.models import CandidateProfile
+    from src.orchestrator.validation import apply_understanding
+
+    profile = CandidateProfile()
+    understanding = TurnUnderstanding(
+        language=Language.ES,
+        intent=Intent.ANSWER,
+        sentiment=Sentiment.NEUTRAL,
+        consent=True,
+        full_name="Laura Gomez",
+    )
+    apply_understanding(profile, understanding, pending=Stage.CONSENT)
+    assert profile.consent is True
+    assert profile.full_name == "Laura Gomez"
+
+
+def test_summary_correction_updates_profile():
+    from src.agents.schemas import TurnUnderstanding
+    from src.fsm.enums import Intent, Language, Sentiment
+    from src.fsm.models import CandidateProfile
+    from src.orchestrator.validation import apply_understanding
+
+    profile = CandidateProfile(
+        consent=True,
+        full_name="Laura",
+        has_license=True,
+        city="Madrid",
+        city_in_service_area=True,
+    )
+    understanding = TurnUnderstanding(
+        language=Language.ES,
+        intent=Intent.ANSWER,
+        sentiment=Sentiment.NEUTRAL,
+        city="Barcelona",
+    )
+    apply_understanding(profile, understanding, pending=None)
+    assert profile.city == "Barcelona"
+    assert profile.city_in_service_area is None
+
+
 def test_terminal_outcome_is_absorbing():
     engine, state = make_engine(), new_state()
     run(engine, state, ["si", "Pedro", "no"])

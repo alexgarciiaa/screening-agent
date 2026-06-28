@@ -33,8 +33,8 @@ class AnthropicProvider:
     def understand(self, state: ConversationState) -> TurnUnderstanding:
         response = self._client.messages.parse(
             model=self._settings.model_understand,
-            max_tokens=600,
-            temperature=0,
+            max_tokens=1000,
+            temperature=0.1,
             system=prompts.SYSTEM_UNDERSTAND,
             messages=[
                 {"role": "user", "content": prompts.understand_user_message(state)}
@@ -53,7 +53,7 @@ class AnthropicProvider:
         )
         response = self._client.messages.create(
             model=model,
-            max_tokens=300,
+            max_tokens=500,
             temperature=0.3,
             system=prompts.SYSTEM_REPLY,
             messages=[

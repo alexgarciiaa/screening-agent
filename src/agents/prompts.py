@@ -124,7 +124,12 @@ def profile_summary(profile: CandidateProfile) -> str:
 
 def understand_user_message(state: ConversationState) -> str:
     pending = next_missing_stage(state.profile)
-    asked_about = pending.value if pending else "confirming the summary"
+    if state.last_asked_stage is not None:
+        asked_about = state.last_asked_stage.value
+    elif pending is not None:
+        asked_about = pending.value
+    else:
+        asked_about = "confirming the summary"
     return (
         "Conversation so far:\n"
         f"{format_transcript(state)}\n\n"

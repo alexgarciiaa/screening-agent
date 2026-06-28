@@ -8,7 +8,7 @@ from ..fsm.enums import (
     Sentiment,
     TERMINAL_OUTCOMES,
 )
-from ..fsm.flow import Decision
+from ..fsm.flow import Decision, next_missing_stage
 from ..fsm.models import ConversationState
 from ..agents.provider import LLMProvider
 from .decision import decide
@@ -33,6 +33,7 @@ class ScreeningEngine:
 
     def start(self, state: ConversationState) -> str:
         decision = decide(state)
+        state.last_asked_stage = decision.stage
         reply = self._provider.reply(state, decision)
         state.add_message("agent", reply)
         return reply
@@ -55,10 +56,15 @@ class ScreeningEngine:
         state.last_sentiment = understanding.sentiment
         state.last_confirmation = understanding.confirmation
 
-        apply_understanding(state.profile, understanding)
+        apply_understanding(
+            state.profile,
+            understanding,
+            pending=next_missing_stage(state.profile),
+        )
         resolve_service_area(state.profile)
 
         decision = decide(state)
+        state.last_asked_stage = decision.stage
         state.awaiting_confirmation = decision.action is Action.CONFIRM_SUMMARY
         if decision.outcome is not None:
             state.outcome = decision.outcome

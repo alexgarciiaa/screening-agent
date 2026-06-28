@@ -10,6 +10,7 @@ from .enums import (
     Outcome,
     Schedule,
     Sentiment,
+    Stage,
 )
 
 
@@ -55,6 +56,7 @@ class ConversationState(BaseModel):
     last_sentiment: Sentiment = Sentiment.NEUTRAL
     awaiting_confirmation: bool = False
     last_confirmation: bool | None = None
+    last_asked_stage: Stage | None = None
     created_at: datetime = Field(default_factory=_now)
     updated_at: datetime = Field(default_factory=_now)
 
