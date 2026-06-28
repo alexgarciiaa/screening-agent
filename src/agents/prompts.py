@@ -2,6 +2,7 @@ from ..config import get_settings
 from ..fsm.enums import Action, Language, Stage
 from ..fsm.flow import Decision, next_missing_stage
 from ..fsm.models import CandidateProfile, ConversationState
+from ..orchestrator.validation import has_multiple_cities
 
 SYSTEM_UNDERSTAND = """\
 You read one message from a candidate applying to be a delivery driver and \
@@ -148,6 +149,19 @@ def _directive(state: ConversationState, decision: Decision) -> str:
             "detail they would like to change."
         )
     if decision.action is Action.CLARIFY and decision.stage is not None:
+        if (
+            decision.stage is Stage.CITY
+            and has_multiple_cities(
+                next(
+                    (m.text for m in reversed(state.messages) if m.role == "candidate"),
+                    "",
+                )
+            )
+        ):
+            return (
+                "The candidate gave more than one city. Ask them to choose a single "
+                "city or zone where they want to work."
+            )
         return (
             "The previous answer was unclear. Re-ask, more concretely and with "
             f"example options. {_ASK_DIRECTIVES[decision.stage]}"

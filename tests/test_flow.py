@@ -171,21 +171,22 @@ def test_start_sets_last_asked_stage():
     assert state.last_asked_stage is Stage.CONSENT
 
 
-def test_wrong_stage_field_is_ignored():
+def test_lookahead_saves_name_during_consent():
     from src.agents.schemas import TurnUnderstanding
     from src.fsm.enums import Intent, Language, Sentiment, Stage
     from src.fsm.models import CandidateProfile
     from src.orchestrator.validation import apply_understanding
 
-    profile = CandidateProfile(consent=True)
+    profile = CandidateProfile()
     understanding = TurnUnderstanding(
         language=Language.ES,
         intent=Intent.ANSWER,
         sentiment=Sentiment.NEUTRAL,
-        city="Madrid",
+        full_name="Juan Lopez Garrido",
     )
-    apply_understanding(profile, understanding, pending=Stage.NAME)
-    assert profile.city is None
+    apply_understanding(profile, understanding, pending=Stage.CONSENT)
+    assert profile.consent is None
+    assert profile.full_name == "Juan Lopez Garrido"
 
 
 def test_multi_field_message_is_accepted():
@@ -205,6 +206,37 @@ def test_multi_field_message_is_accepted():
     apply_understanding(profile, understanding, pending=Stage.CONSENT)
     assert profile.consent is True
     assert profile.full_name == "Laura Gomez"
+
+
+def test_multiple_cities_are_not_saved():
+    from src.agents.schemas import TurnUnderstanding
+    from src.fsm.enums import Intent, Language, Sentiment, Stage
+    from src.fsm.models import CandidateProfile
+    from src.orchestrator.validation import apply_understanding, has_multiple_cities
+
+    assert has_multiple_cities("madrid y buenos aires")
+
+    profile = CandidateProfile(consent=True, full_name="Juan", has_license=True)
+    understanding = TurnUnderstanding(
+        language=Language.ES,
+        intent=Intent.ANSWER,
+        sentiment=Sentiment.NEUTRAL,
+        city="madrid y buenos aires",
+    )
+    apply_understanding(profile, understanding, pending=Stage.CITY)
+    assert profile.city is None
+
+
+def test_multiple_cities_trigger_clarify():
+    from src.fsm.enums import Action, Stage
+
+    engine, state = make_engine(), new_state()
+    run(engine, state, ["si", "Juan Lopez", "si"])
+    turn = engine.handle(state, "madrid y buenos aires")
+    assert state.profile.city is None
+    assert turn.decision is not None
+    assert turn.decision.action is Action.CLARIFY
+    assert turn.decision.stage is Stage.CITY
 
 
 def test_summary_correction_updates_profile():

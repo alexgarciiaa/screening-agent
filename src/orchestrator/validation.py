@@ -1,7 +1,18 @@
+import re
+
 from ..agents.schemas import TurnUnderstanding
 from ..data.service_areas import find_service_area
 from ..fsm.enums import Stage
+from ..fsm.flow import REQUIRED_ORDER
 from ..fsm.models import CandidateProfile
+
+_MULTI_CITY_SPLIT = re.compile(r"\s+(?:y|and|\/|,)\s+", re.IGNORECASE)
+
+
+def has_multiple_cities(city_text: str) -> bool:
+    """True when the candidate appears to name more than one city."""
+    parts = [p.strip() for p in _MULTI_CITY_SPLIT.split(city_text.strip()) if p.strip()]
+    return len(parts) > 1
 
 
 def stages_with_extracted_fields(understanding: TurnUnderstanding) -> set[Stage]:
@@ -29,6 +40,19 @@ def stages_with_extracted_fields(understanding: TurnUnderstanding) -> set[Stage]
     return stages
 
 
+def _stage_order(stage: Stage) -> int:
+    try:
+        return REQUIRED_ORDER.index(stage)
+    except ValueError:
+        return len(REQUIRED_ORDER)
+
+
+def _stages_to_merge(extracted: set[Stage], pending: Stage) -> set[Stage]:
+    """Pending stage plus any later stages volunteered in the same message."""
+    pending_order = _stage_order(pending)
+    return {s for s in extracted if _stage_order(s) >= pending_order}
+
+
 def apply_understanding(
     profile: CandidateProfile,
     understanding: TurnUnderstanding,
@@ -37,9 +61,10 @@ def apply_understanding(
 ) -> None:
     """Merge fields from the latest message into the profile.
 
-    By default only the pending collection stage is accepted. Multiple stages in
-    one message are merged together (voluntary multi-answer). When every required
-    stage is satisfied (``pending is None``), any provided correction is accepted.
+    The pending stage must still be satisfied before the flow moves on, but
+    fields from later stages are stored when the candidate volunteers them early.
+    When every required stage is satisfied (``pending is None``), any provided
+    correction is accepted.
     """
     extracted = stages_with_extracted_fields(understanding)
 
@@ -47,14 +72,10 @@ def apply_understanding(
         _merge_stages(profile, understanding, extracted)
         return
 
-    if len(extracted) > 1:
-        _merge_stages(profile, understanding, extracted)
+    if not extracted:
         return
 
-    if extracted and extracted != {pending}:
-        return
-
-    _merge_stages(profile, understanding, {pending})
+    _merge_stages(profile, understanding, _stages_to_merge(extracted, pending))
 
 
 def _merge_stages(
@@ -84,7 +105,7 @@ def _merge_stage(
             if understanding.has_license is not None:
                 profile.has_license = understanding.has_license
         case Stage.CITY:
-            if understanding.city:
+            if understanding.city and not has_multiple_cities(understanding.city):
                 profile.city = understanding.city.strip()
                 profile.matched_location = None
                 profile.city_in_service_area = None

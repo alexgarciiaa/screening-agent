@@ -1,6 +1,14 @@
 from ..fsm.enums import Action, Intent, Outcome, Stage
 from ..fsm.flow import Decision, next_missing_stage
 from ..fsm.models import ConversationState
+from .validation import has_multiple_cities
+
+
+def _last_candidate_text(state: ConversationState) -> str:
+    for message in reversed(state.messages):
+        if message.role == "candidate":
+            return message.text
+    return ""
 
 
 def decide(state: ConversationState) -> Decision:
@@ -26,6 +34,9 @@ def decide(state: ConversationState) -> Decision:
         return Decision(Action.CLOSE_OUT_OF_AREA, outcome=Outcome.OUT_OF_AREA)
 
     stage = next_missing_stage(profile)
+
+    if stage is Stage.CITY and has_multiple_cities(_last_candidate_text(state)):
+        return Decision(Action.CLARIFY, stage=Stage.CITY)
 
     if state.last_intent is Intent.UNCLEAR and stage is not None:
         return Decision(Action.CLARIFY, stage=stage)
