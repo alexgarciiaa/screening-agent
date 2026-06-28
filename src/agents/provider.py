@@ -26,12 +26,15 @@ class AnthropicProvider:
         import anthropic
 
         self._settings = settings
-        self._client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
+        self._client = anthropic.Anthropic(
+            api_key=settings.anthropic_api_key, timeout=30.0
+        )
 
     def understand(self, state: ConversationState) -> TurnUnderstanding:
         response = self._client.messages.parse(
             model=self._settings.model_understand,
             max_tokens=600,
+            temperature=0,
             system=prompts.SYSTEM_UNDERSTAND,
             messages=[
                 {"role": "user", "content": prompts.understand_user_message(state)}
@@ -51,6 +54,7 @@ class AnthropicProvider:
         response = self._client.messages.create(
             model=model,
             max_tokens=300,
+            temperature=0.3,
             system=prompts.SYSTEM_REPLY,
             messages=[
                 {"role": "user", "content": prompts.reply_user_message(state, decision)}
@@ -66,7 +70,7 @@ class GroqProvider:
         import groq
 
         self._settings = settings
-        self._client = groq.Groq(api_key=settings.groq_api_key)
+        self._client = groq.Groq(api_key=settings.groq_api_key, timeout=30.0)
 
     def understand(self, state: ConversationState) -> TurnUnderstanding:
         schema = json.dumps(TurnUnderstanding.model_json_schema())
@@ -93,7 +97,7 @@ class GroqProvider:
     ) -> str:
         response = self._client.chat.completions.create(
             model=self._settings.groq_model_reply,
-            temperature=0.4,
+            temperature=0.3,
             messages=[
                 {"role": "system", "content": prompts.SYSTEM_REPLY},
                 {"role": "user", "content": prompts.reply_user_message(state, decision)},
