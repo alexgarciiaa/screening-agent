@@ -131,6 +131,17 @@ def test_service_area_catalog_seeds_and_matches(tmp_path):
     assert catalog.find("Toledo") is None
 
 
+def test_voice_modality_is_recorded():
+    from src.fsm.enums import Modality
+
+    engine, state = make_engine(), new_state()
+    engine.start(state)
+    engine.handle(state, "si", Modality.VOICE)
+    candidate_msg = state.messages[1]
+    assert candidate_msg.role == "candidate"
+    assert candidate_msg.modality is Modality.VOICE
+
+
 def test_summary_rejection_keeps_consent_and_stays_open():
     engine, state = make_engine(), new_state()
     run(

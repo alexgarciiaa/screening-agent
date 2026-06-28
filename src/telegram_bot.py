@@ -17,9 +17,11 @@ from telegram.ext import (
     filters,
 )
 
+from .agents import stt
 from .agents.provider import build_provider
 from .config import get_settings
 from .data import service_areas
+from .fsm.enums import Modality
 from .orchestrator.engine import ScreeningEngine
 from .orchestrator.handoff import build_handoff
 from .storage.repository import ConversationRepository
@@ -49,8 +51,12 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.message.reply_text(greeting)
 
 
-async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    chat_id = update.effective_chat.id
+async def _process_turn(
+    context: ContextTypes.DEFAULT_TYPE,
+    chat_id: int,
+    text: str,
+    modality: Modality = Modality.TEXT,
+) -> str:
     engine: ScreeningEngine = context.application.bot_data["engine"]
     repo: ConversationRepository = context.application.bot_data["repository"]
     candidate_id = str(chat_id)
@@ -58,7 +64,7 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         async with _lock(chat_id):
             state = await asyncio.to_thread(repo.get_active, candidate_id)
             if state is not None:
-                turn = await asyncio.to_thread(engine.handle, state, update.message.text)
+                turn = await asyncio.to_thread(engine.handle, state, text, modality)
                 reply = turn.reply
                 if turn.finished:
                     logger.info(
@@ -81,6 +87,32 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     except Exception:
         logger.exception("Error handling update from chat %s", chat_id)
         reply = "Ha ocurrido un error. Escribe /start para empezar de nuevo."
+    return reply
+
+
+async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    reply = await _process_turn(context, update.effective_chat.id, update.message.text)
+    await update.message.reply_text(reply)
+
+
+async def on_voice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    chat_id = update.effective_chat.id
+    settings = context.application.bot_data["settings"]
+    try:
+        tg_file = await context.bot.get_file(update.message.voice.file_id)
+        audio = bytes(await tg_file.download_as_bytearray())
+        text = await asyncio.to_thread(stt.transcribe, settings, audio)
+    except Exception:
+        logger.exception("Voice transcription failed for chat %s", chat_id)
+        text = None
+
+    if not text:
+        await update.message.reply_text(
+            "No pude entender el audio. ¿Puedes repetirlo o escribirlo, por favor?"
+        )
+        return
+
+    reply = await _process_turn(context, chat_id, text, Modality.VOICE)
     await update.message.reply_text(reply)
 
 
@@ -109,8 +141,10 @@ def main() -> None:
     )
     app.bot_data["engine"] = ScreeningEngine(provider, settings)
     app.bot_data["repository"] = ConversationRepository(settings.database_url)
+    app.bot_data["settings"] = settings
     app.add_handler(CommandHandler("start", start))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, on_message))
+    app.add_handler(MessageHandler(filters.VOICE, on_voice))
 
     if settings.telegram_webhook_url:
         logger.info("Starting in webhook mode on port %s.", settings.port)
