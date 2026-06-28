@@ -44,6 +44,29 @@ class ConversationRepository:
             conversation_id=str(uuid.uuid4()), candidate_id=candidate_id
         )
 
+    def get_active(self, candidate_id: str) -> ConversationState | None:
+        """Return the candidate's in-progress conversation, or None."""
+        with self._session_factory() as session:
+            row = session.scalars(
+                select(ConversationRow)
+                .where(
+                    ConversationRow.candidate_id == candidate_id,
+                    ConversationRow.outcome == Outcome.IN_PROGRESS.value,
+                )
+                .order_by(ConversationRow.updated_at.desc())
+            ).first()
+            return ConversationState.model_validate(row.state) if row else None
+
+    def latest(self, candidate_id: str) -> ConversationState | None:
+        """Return the candidate's most recent conversation of any outcome."""
+        with self._session_factory() as session:
+            row = session.scalars(
+                select(ConversationRow)
+                .where(ConversationRow.candidate_id == candidate_id)
+                .order_by(ConversationRow.updated_at.desc())
+            ).first()
+            return ConversationState.model_validate(row.state) if row else None
+
     def save(self, state: ConversationState) -> None:
         payload = state.model_dump(mode="json")
         with self._session_factory() as session:

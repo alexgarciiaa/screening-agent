@@ -108,6 +108,20 @@ def test_dashboard_columns_are_populated(tmp_path):
     assert row.qualified is True
 
 
+def test_finished_conversation_is_not_active(tmp_path):
+    repo = ConversationRepository(f"sqlite:///{tmp_path / 'a.db'}")
+    state = repo.get_or_create("c1")
+    state.add_message("agent", "hola")
+    repo.save(state)
+    assert repo.get_active("c1") is not None
+
+    state.outcome = Outcome.QUALIFIED
+    repo.save(state)
+    assert repo.get_active("c1") is None
+    latest = repo.latest("c1")
+    assert latest is not None and latest.outcome is Outcome.QUALIFIED
+
+
 def test_summary_rejection_keeps_consent_and_stays_open():
     engine, state = make_engine(), new_state()
     run(

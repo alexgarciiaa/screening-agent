@@ -55,10 +55,8 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     candidate_id = str(chat_id)
     try:
         async with _lock(chat_id):
-            state = await asyncio.to_thread(repo.get_or_create, candidate_id)
-            if not state.messages:
-                reply = await asyncio.to_thread(engine.start, state)
-            else:
+            state = await asyncio.to_thread(repo.get_active, candidate_id)
+            if state is not None:
                 turn = await asyncio.to_thread(engine.handle, state, update.message.text)
                 reply = turn.reply
                 if turn.finished:
@@ -67,7 +65,18 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
                         chat_id,
                         build_handoff(state).model_dump_json(indent=2),
                     )
-            await asyncio.to_thread(repo.save, state)
+                await asyncio.to_thread(repo.save, state)
+            elif await asyncio.to_thread(repo.latest, candidate_id) is not None:
+                # The candidate already finished; do not auto-start a new one.
+                reply = (
+                    "Ya hemos terminado tu proceso de selección. "
+                    "Si quieres empezar de nuevo, escribe /start."
+                )
+            else:
+                # Brand-new candidate who messaged without /start.
+                state = await asyncio.to_thread(repo.get_or_create, candidate_id)
+                reply = await asyncio.to_thread(engine.start, state)
+                await asyncio.to_thread(repo.save, state)
     except Exception:
         logger.exception("Error handling update from chat %s", chat_id)
         reply = "Ha ocurrido un error. Escribe /start para empezar de nuevo."
