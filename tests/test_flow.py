@@ -122,6 +122,15 @@ def test_finished_conversation_is_not_active(tmp_path):
     assert latest is not None and latest.outcome is Outcome.QUALIFIED
 
 
+def test_service_area_catalog_seeds_and_matches(tmp_path):
+    from src.data.service_areas import ServiceAreaCatalog
+
+    catalog = ServiceAreaCatalog(f"sqlite:///{tmp_path / 'sa.db'}")
+    assert catalog.find("Madrid") is not None
+    assert catalog.find("cdmx").city == "Ciudad de Mexico"  # alias
+    assert catalog.find("Toledo") is None
+
+
 def test_summary_rejection_keeps_consent_and_stays_open():
     engine, state = make_engine(), new_state()
     run(

@@ -1,30 +1,17 @@
 import uuid
 
-from sqlalchemy import create_engine, select
+from sqlalchemy import select
 from sqlalchemy.orm import sessionmaker
 
 from ..fsm.enums import Outcome
 from ..fsm.models import ConversationState
-from .db import Base
+from .db import Base, create_db_engine
 from .models import ConversationRow
-
-
-def _normalize_db_url(url: str) -> str:
-    """Route the plain Postgres URI that Supabase gives through psycopg 3."""
-    if url.startswith("postgres://"):
-        url = "postgresql://" + url[len("postgres://") :]
-    if url.startswith("postgresql://"):
-        url = "postgresql+psycopg://" + url[len("postgresql://") :]
-    return url
 
 
 class ConversationRepository:
     def __init__(self, database_url: str) -> None:
-        url = _normalize_db_url(database_url)
-        # Disable prepared statements on Postgres so it works behind Supabase's
-        # connection poolers (transaction mode rejects them).
-        connect_args = {"prepare_threshold": None} if url.startswith("postgresql") else {}
-        self._engine = create_engine(url, future=True, connect_args=connect_args)
+        self._engine = create_db_engine(database_url)
         Base.metadata.create_all(self._engine)
         self._session_factory = sessionmaker(self._engine, future=True)
 

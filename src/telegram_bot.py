@@ -19,6 +19,7 @@ from telegram.ext import (
 
 from .agents.provider import build_provider
 from .config import get_settings
+from .data import service_areas
 from .orchestrator.engine import ScreeningEngine
 from .orchestrator.handoff import build_handoff
 from .storage.repository import ConversationRepository
@@ -96,6 +97,8 @@ def main() -> None:
         provider = build_provider(settings)
     except RuntimeError as exc:
         raise SystemExit(str(exc))
+
+    service_areas.configure(settings.database_url)
 
     app = (
         ApplicationBuilder()

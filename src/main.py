@@ -3,6 +3,7 @@
 from .config import get_settings
 from .fsm.enums import TERMINAL_OUTCOMES
 from .agents.provider import build_provider
+from .data import service_areas
 from .orchestrator.engine import ScreeningEngine
 from .orchestrator.handoff import build_handoff
 from .storage.repository import ConversationRepository
@@ -15,6 +16,7 @@ def main() -> None:
     except RuntimeError as exc:
         print(exc)
         return
+    service_areas.configure(settings.database_url)
     repository = ConversationRepository(settings.database_url)
     engine = ScreeningEngine(provider, settings)
 
