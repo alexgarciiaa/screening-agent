@@ -73,17 +73,26 @@ async def _process_turn(
                         build_handoff(state).model_dump_json(indent=2),
                     )
                 await asyncio.to_thread(repo.save, state)
-            elif await asyncio.to_thread(repo.latest, candidate_id) is not None:
-                # The candidate already finished; do not auto-start a new one.
-                reply = (
-                    "Ya hemos terminado tu proceso de selección. "
-                    "Si quieres empezar de nuevo, escribe /start."
-                )
             else:
-                # Brand-new candidate who messaged without /start.
-                state = await asyncio.to_thread(repo.get_or_create, candidate_id)
-                reply = await asyncio.to_thread(engine.start, state)
-                await asyncio.to_thread(repo.save, state)
+                finished = await asyncio.to_thread(repo.latest, candidate_id)
+                if finished is not None:
+                    # Screening is over; collect a one-off NPS rating.
+                    nps_reply = await asyncio.to_thread(
+                        engine.follow_up, finished, text
+                    )
+                    if nps_reply is not None:
+                        await asyncio.to_thread(repo.save, finished)
+                        reply = nps_reply
+                    else:
+                        reply = (
+                            "Ya hemos terminado tu proceso de selección. "
+                            "Si quieres empezar de nuevo, escribe /start."
+                        )
+                else:
+                    # Brand-new candidate who messaged without /start.
+                    state = await asyncio.to_thread(repo.get_or_create, candidate_id)
+                    reply = await asyncio.to_thread(engine.start, state)
+                    await asyncio.to_thread(repo.save, state)
     except Exception:
         logger.exception("Error handling update from chat %s", chat_id)
         reply = "Ha ocurrido un error. Escribe /start para empezar de nuevo."

@@ -61,6 +61,8 @@ class Action(str, Enum):
     CLOSE_OUT_OF_AREA = "close_out_of_area"
     CLOSE_CONSENT_DECLINED = "close_consent_declined"
     CLOSE_OPTED_OUT = "close_opted_out"
+    ASK_NPS = "ask_nps"
+    CLOSE_NPS = "close_nps"
 
 
 class Outcome(str, Enum):
@@ -76,3 +78,18 @@ class Outcome(str, Enum):
 TERMINAL_OUTCOMES = frozenset(
     o for o in Outcome if o is not Outcome.IN_PROGRESS
 )
+
+
+class NpsCategory(str, Enum):
+    DETRACTOR = "detractor"
+    PASSIVE = "passive"
+    PROMOTER = "promoter"
+
+
+def classify_nps(score: int) -> NpsCategory:
+    """Bucket a 0-10 rating into the standard NPS category."""
+    if score >= 9:
+        return NpsCategory.PROMOTER
+    if score >= 7:
+        return NpsCategory.PASSIVE
+    return NpsCategory.DETRACTOR

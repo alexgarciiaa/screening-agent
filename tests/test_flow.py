@@ -306,3 +306,48 @@ def test_handoff_disqualified():
     assert handoff.qualified is False
     assert handoff.outcome is Outcome.DISQUALIFIED_NO_LICENSE
     assert "carnet" in handoff.recommended_action.lower()
+
+
+def test_nps_followup_after_finish():
+    engine, state = make_engine(), new_state()
+    run(engine, state, ["si", "Pedro", "no"])
+    assert state.outcome is Outcome.DISQUALIFIED_NO_LICENSE
+
+    first = engine.follow_up(state, "muchas gracias")
+    assert first is not None
+    assert state.nps_asked is True
+    assert state.nps_score is None
+
+    engine.follow_up(state, "le doy un 8")
+    assert state.nps_score == 8
+    assert state.nps_done is True
+
+    assert engine.follow_up(state, "vale, adios") is None
+
+
+def test_nps_classification():
+    from src.fsm.enums import NpsCategory, classify_nps
+
+    assert classify_nps(10) is NpsCategory.PROMOTER
+    assert classify_nps(9) is NpsCategory.PROMOTER
+    assert classify_nps(8) is NpsCategory.PASSIVE
+    assert classify_nps(7) is NpsCategory.PASSIVE
+    assert classify_nps(6) is NpsCategory.DETRACTOR
+    assert classify_nps(0) is NpsCategory.DETRACTOR
+
+
+def test_nps_category_stored_for_dashboard(tmp_path):
+    from sqlalchemy import select
+    from sqlalchemy.orm import Session
+
+    from src.storage.models import ConversationRow
+
+    repo = ConversationRepository(f"sqlite:///{tmp_path / 'nps.db'}")
+    state = repo.get_or_create("c1")
+    state.nps_score = 9
+    repo.save(state)
+
+    with Session(repo._engine) as session:
+        row = session.scalars(select(ConversationRow)).one()
+    assert row.nps == 9
+    assert row.nps_category == "promoter"

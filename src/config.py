@@ -17,7 +17,7 @@ class Settings(BaseSettings):
     # Anthropic routing: cheap model for understanding and simple replies,
     # stronger model for emotionally loaded turns and the closing summary.
     model_understand: str = "claude-haiku-4-5"
-    model_reply: str = "claude-haiku-4-5"
+    model_reply: str = "claude-sonnet-4-6"
     model_reply_escalated: str = "claude-sonnet-4-6"
 
     # Groq fallback (used only if Anthropic fails).

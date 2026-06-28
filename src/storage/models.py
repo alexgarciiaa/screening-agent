@@ -17,6 +17,8 @@ class ConversationRow(Base):
     full_name: Mapped[str | None] = mapped_column(String, nullable=True)
     city: Mapped[str | None] = mapped_column(String, nullable=True)
     qualified: Mapped[bool] = mapped_column(Boolean, default=False)
+    nps: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    nps_category: Mapped[str | None] = mapped_column(String, nullable=True)
     state: Mapped[dict] = mapped_column(JSON)
     created_at: Mapped[datetime] = mapped_column(DateTime)
     updated_at: Mapped[datetime] = mapped_column(DateTime)

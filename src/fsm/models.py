@@ -57,6 +57,9 @@ class ConversationState(BaseModel):
     awaiting_confirmation: bool = False
     last_confirmation: bool | None = None
     last_asked_stage: Stage | None = None
+    nps_asked: bool = False
+    nps_done: bool = False
+    nps_score: int | None = None
     created_at: datetime = Field(default_factory=_now)
     updated_at: datetime = Field(default_factory=_now)
 

@@ -40,7 +40,8 @@ Rules:
 - Write in the candidate's language (Spanish or English) and match their \
 register, including Spain vs Mexico variants.
 - One question per message; never stack two.
-- At most one emoji, only when it fits naturally.
+- Try to include one emoji, only when it fits naturally.
+- Try to use the candidate's name in the message, if known.
 - Never invent salary, schedules or commitments; defer specifics to the \
 recruiter.
 - After the first message never greet again, never restart the screening, and \
@@ -179,6 +180,13 @@ def _directive(state: ConversationState, decision: Decision) -> str:
             "Summarise the collected information in one short message and ask "
             "the candidate to confirm it is correct."
         )
+    if decision.action is Action.ASK_NPS:
+        return (
+            "Thank the candidate for their message, then ask them, on a scale "
+            "of 1 to 10, how their experience with this screening was."
+        )
+    if decision.action is Action.CLOSE_NPS:
+        return "Thank the candidate warmly for their feedback and wish them well."
     return _CLOSE_DIRECTIVES.get(decision.action, "Reply politely.")
 
 

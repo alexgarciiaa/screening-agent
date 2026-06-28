@@ -3,7 +3,7 @@ import uuid
 from sqlalchemy import select
 from sqlalchemy.orm import sessionmaker
 
-from ..fsm.enums import Outcome
+from ..fsm.enums import Outcome, classify_nps
 from ..fsm.models import ConversationState
 from .db import Base, create_db_engine
 from .models import ConversationRow
@@ -66,6 +66,12 @@ class ConversationRepository:
             row.full_name = state.profile.full_name
             row.city = state.profile.matched_location or state.profile.city
             row.qualified = state.outcome is Outcome.QUALIFIED
+            row.nps = state.nps_score
+            row.nps_category = (
+                classify_nps(state.nps_score).value
+                if state.nps_score is not None
+                else None
+            )
             row.state = payload
             row.created_at = state.created_at
             row.updated_at = state.updated_at

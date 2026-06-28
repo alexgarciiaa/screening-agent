@@ -1,3 +1,4 @@
+import re
 from dataclasses import dataclass
 
 from ..config import Settings
@@ -16,6 +17,13 @@ from .validation import apply_understanding, resolve_service_area
 
 _ESCALATING_SENTIMENTS = {Sentiment.FRUSTRATED, Sentiment.CONFUSED}
 _ESCALATING_ACTIONS = {Action.CONFIRM_SUMMARY, Action.CLOSE_QUALIFIED}
+
+_NPS_RE = re.compile(r"\b(10|[0-9])\b")
+
+
+def _parse_nps(text: str) -> int | None:
+    match = _NPS_RE.search(text)
+    return int(match.group()) if match else None
 
 
 @dataclass
@@ -82,3 +90,23 @@ class ScreeningEngine:
             outcome=state.outcome,
             finished=state.outcome in TERMINAL_OUTCOMES,
         )
+
+    def follow_up(self, state: ConversationState, text: str) -> str | None:
+        """Post-screening NPS: thank the candidate and ask for a 1-10 score.
+
+        Runs after the screening has finished. Returns a reply, or None once the
+        feedback step is over.
+        """
+        if state.nps_done:
+            return None
+        state.add_message("candidate", text)
+        if not state.nps_asked:
+            state.nps_asked = True
+            decision = Decision(Action.ASK_NPS)
+        else:
+            state.nps_score = _parse_nps(text)
+            state.nps_done = True
+            decision = Decision(Action.CLOSE_NPS)
+        reply = self._provider.reply(state, decision)
+        state.add_message("agent", reply)
+        return reply

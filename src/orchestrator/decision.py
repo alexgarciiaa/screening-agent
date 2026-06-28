@@ -35,7 +35,11 @@ def decide(state: ConversationState) -> Decision:
 
     stage = next_missing_stage(profile)
 
-    if stage is Stage.CITY and has_multiple_cities(_last_candidate_text(state)):
+    if (
+        stage is Stage.CITY
+        and state.last_intent is Intent.ANSWER
+        and has_multiple_cities(_last_candidate_text(state))
+    ):
         return Decision(Action.CLARIFY, stage=Stage.CITY)
 
     if state.last_intent is Intent.UNCLEAR and stage is not None:
