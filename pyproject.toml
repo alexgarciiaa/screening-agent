@@ -14,8 +14,7 @@ dependencies = [
     "pydantic-settings>=2.2",
     "sqlalchemy>=2.0",
     "rapidfuzz>=3.6",
-    "python-telegram-bot>=21",
-    "qrcode>=7",
+    "python-telegram-bot[webhooks]>=21",
 ]
 
 [project.optional-dependencies]

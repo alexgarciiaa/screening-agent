@@ -76,32 +76,9 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     await update.message.reply_text(reply)
 
 
-def _render_qr(link: str) -> None:
-    try:
-        import qrcode
-        from qrcode.image.svg import SvgImage
-    except ImportError:
-        logger.info("Install 'qrcode' to render the access QR for %s", link)
-        return
-    qr = qrcode.QRCode(border=2)
-    qr.add_data(link)
-    qr.make(fit=True)
-    try:
-        qr.print_ascii(invert=True)  # best effort; fails on non-UTF-8 consoles
-    except Exception:
-        logger.debug("Could not print the ASCII QR", exc_info=True)
-    try:
-        qrcode.make(link, image_factory=SvgImage).save("bot_qr.svg")
-        logger.info("Access QR saved to bot_qr.svg")
-    except Exception:
-        logger.debug("Could not save the SVG QR", exc_info=True)
-
-
 async def _announce(app) -> None:
     me = await app.bot.get_me()
-    link = f"https://t.me/{me.username}"
-    logger.info("Bot @%s is live. Open: %s", me.username, link)
-    _render_qr(link)
+    logger.info("Bot @%s is live: https://t.me/%s", me.username, me.username)
 
 
 def main() -> None:
@@ -124,8 +101,17 @@ def main() -> None:
     app.add_handler(CommandHandler("start", start))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, on_message))
 
-    logger.info("Starting Telegram bot (long polling). Ctrl+C to stop.")
-    app.run_polling()
+    if settings.telegram_webhook_url:
+        logger.info("Starting in webhook mode on port %s.", settings.port)
+        app.run_webhook(
+            listen="0.0.0.0",
+            port=settings.port,
+            url_path=settings.telegram_bot_token,
+            webhook_url=f"{settings.telegram_webhook_url.rstrip('/')}/{settings.telegram_bot_token}",
+        )
+    else:
+        logger.info("Starting in polling mode (local). Ctrl+C to stop.")
+        app.run_polling()
 
 
 if __name__ == "__main__":

@@ -9,6 +9,9 @@ class Settings(BaseSettings):
     anthropic_api_key: str | None = None
     groq_api_key: str | None = None
     telegram_bot_token: str = ""
+    # Set on the host to run in webhook mode (web service). Empty = local polling.
+    telegram_webhook_url: str = ""
+    port: int = 8000
     database_url: str = "sqlite:///screening.db"
 
     # Anthropic routing: cheap model for understanding and simple replies,

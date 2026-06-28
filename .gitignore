@@ -15,9 +15,6 @@ env/
 .pytest_cache/
 .coverage
 
-# Generated at runtime by the Telegram bot
-bot_qr.*
-
 docs/
 
 demos/
