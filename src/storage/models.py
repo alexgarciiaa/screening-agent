@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import JSON, DateTime, String
+from sqlalchemy import JSON, Boolean, DateTime, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from .db import Base
@@ -12,5 +12,11 @@ class ConversationRow(Base):
     conversation_id: Mapped[str] = mapped_column(String, primary_key=True)
     candidate_id: Mapped[str] = mapped_column(String, index=True)
     outcome: Mapped[str] = mapped_column(String, index=True)
+    # Flat columns so the conversation is readable in a dashboard; the full
+    # state lives in `state` for resuming.
+    full_name: Mapped[str | None] = mapped_column(String, nullable=True)
+    city: Mapped[str | None] = mapped_column(String, nullable=True)
+    qualified: Mapped[bool] = mapped_column(Boolean, default=False)
     state: Mapped[dict] = mapped_column(JSON)
+    created_at: Mapped[datetime] = mapped_column(DateTime)
     updated_at: Mapped[datetime] = mapped_column(DateTime)

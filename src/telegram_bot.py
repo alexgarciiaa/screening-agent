@@ -1,12 +1,12 @@
 """Telegram entrypoint: runs the screening agent as an always-on bot via long polling.
 
 This is the main entry point in production. The CLI (`main.py`) is kept for testing.
-Sessions are held in memory, keyed by Telegram chat id, so a restart starts fresh.
+Conversations are persisted via the repository (SQLite locally, Postgres/Supabase in
+production), keyed by chat id, so the bot remembers each candidate across restarts.
 """
 
 import asyncio
 import logging
-import uuid
 
 from telegram import Update
 from telegram.ext import (
@@ -21,19 +21,14 @@ from .agents.provider import build_provider
 from .config import get_settings
 from .orchestrator.engine import ScreeningEngine
 from .orchestrator.handoff import build_handoff
-from .fsm.models import ConversationState
+from .storage.repository import ConversationRepository
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s"
 )
 logger = logging.getLogger(__name__)
 
-_sessions: dict[int, ConversationState] = {}
 _locks: dict[int, asyncio.Lock] = {}
-
-
-def _new_session(chat_id: int) -> ConversationState:
-    return ConversationState(conversation_id=uuid.uuid4().hex, candidate_id=str(chat_id))
 
 
 def _lock(chat_id: int) -> asyncio.Lock:
@@ -43,22 +38,25 @@ def _lock(chat_id: int) -> asyncio.Lock:
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     chat_id = update.effective_chat.id
     engine: ScreeningEngine = context.application.bot_data["engine"]
+    repo: ConversationRepository = context.application.bot_data["repository"]
+    candidate_id = str(chat_id)
     async with _lock(chat_id):
-        state = _new_session(chat_id)
-        _sessions[chat_id] = state
+        await asyncio.to_thread(repo.reset, candidate_id)
+        state = await asyncio.to_thread(repo.get_or_create, candidate_id)
         greeting = await asyncio.to_thread(engine.start, state)
+        await asyncio.to_thread(repo.save, state)
     await update.message.reply_text(greeting)
 
 
 async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     chat_id = update.effective_chat.id
     engine: ScreeningEngine = context.application.bot_data["engine"]
+    repo: ConversationRepository = context.application.bot_data["repository"]
+    candidate_id = str(chat_id)
     try:
         async with _lock(chat_id):
-            state = _sessions.get(chat_id)
-            if state is None:
-                state = _new_session(chat_id)
-                _sessions[chat_id] = state
+            state = await asyncio.to_thread(repo.get_or_create, candidate_id)
+            if not state.messages:
                 reply = await asyncio.to_thread(engine.start, state)
             else:
                 turn = await asyncio.to_thread(engine.handle, state, update.message.text)
@@ -69,7 +67,7 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
                         chat_id,
                         build_handoff(state).model_dump_json(indent=2),
                     )
-                    _sessions.pop(chat_id, None)
+            await asyncio.to_thread(repo.save, state)
     except Exception:
         logger.exception("Error handling update from chat %s", chat_id)
         reply = "Ha ocurrido un error. Escribe /start para empezar de nuevo."
@@ -98,6 +96,7 @@ def main() -> None:
         .build()
     )
     app.bot_data["engine"] = ScreeningEngine(provider, settings)
+    app.bot_data["repository"] = ConversationRepository(settings.database_url)
     app.add_handler(CommandHandler("start", start))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, on_message))
 

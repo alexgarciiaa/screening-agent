@@ -9,19 +9,34 @@ from .db import Base
 from .models import ConversationRow
 
 
+def _normalize_db_url(url: str) -> str:
+    """Route the plain Postgres URI that Supabase gives through psycopg 3."""
+    if url.startswith("postgres://"):
+        url = "postgresql://" + url[len("postgres://") :]
+    if url.startswith("postgresql://"):
+        url = "postgresql+psycopg://" + url[len("postgresql://") :]
+    return url
+
+
 class ConversationRepository:
     def __init__(self, database_url: str) -> None:
-        self._engine = create_engine(database_url, future=True)
+        url = _normalize_db_url(database_url)
+        # Disable prepared statements on Postgres so it works behind Supabase's
+        # connection poolers (transaction mode rejects them).
+        connect_args = {"prepare_threshold": None} if url.startswith("postgresql") else {}
+        self._engine = create_engine(url, future=True, connect_args=connect_args)
         Base.metadata.create_all(self._engine)
         self._session_factory = sessionmaker(self._engine, future=True)
 
     def get_or_create(self, candidate_id: str) -> ConversationState:
         with self._session_factory() as session:
             row = session.scalars(
-                select(ConversationRow).where(
+                select(ConversationRow)
+                .where(
                     ConversationRow.candidate_id == candidate_id,
                     ConversationRow.outcome == Outcome.IN_PROGRESS.value,
                 )
+                .order_by(ConversationRow.updated_at.desc())
             ).first()
             if row is not None:
                 return ConversationState.model_validate(row.state)
@@ -38,8 +53,25 @@ class ConversationRepository:
                 session.add(row)
             row.candidate_id = state.candidate_id
             row.outcome = state.outcome.value
+            row.full_name = state.profile.full_name
+            row.city = state.profile.matched_location or state.profile.city
+            row.qualified = state.outcome is Outcome.QUALIFIED
             row.state = payload
+            row.created_at = state.created_at
             row.updated_at = state.updated_at
+            session.commit()
+
+    def reset(self, candidate_id: str) -> None:
+        """Mark any active conversation for this candidate as abandoned."""
+        with self._session_factory() as session:
+            rows = session.scalars(
+                select(ConversationRow).where(
+                    ConversationRow.candidate_id == candidate_id,
+                    ConversationRow.outcome == Outcome.IN_PROGRESS.value,
+                )
+            ).all()
+            for row in rows:
+                row.outcome = Outcome.ABANDONED.value
             session.commit()
 
     def list_by_outcome(self, outcome: Outcome) -> list[ConversationState]:

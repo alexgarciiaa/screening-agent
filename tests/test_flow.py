@@ -76,6 +76,38 @@ def test_repository_round_trip(tmp_path):
     assert resumed.messages[-1].text == "hola"
 
 
+def test_reset_starts_a_fresh_conversation(tmp_path):
+    repo = ConversationRepository(f"sqlite:///{tmp_path / 'r.db'}")
+    state = repo.get_or_create("c1")
+    state.add_message("agent", "hola")
+    repo.save(state)
+
+    repo.reset("c1")
+    fresh = repo.get_or_create("c1")
+    assert fresh.conversation_id != state.conversation_id
+    assert fresh.messages == []
+
+
+def test_dashboard_columns_are_populated(tmp_path):
+    from sqlalchemy import select
+    from sqlalchemy.orm import Session
+
+    from src.storage.models import ConversationRow
+
+    repo = ConversationRepository(f"sqlite:///{tmp_path / 'd.db'}")
+    state = repo.get_or_create("c1")
+    state.profile.full_name = "Laura"
+    state.profile.city = "Madrid"
+    state.outcome = Outcome.QUALIFIED
+    repo.save(state)
+
+    with Session(repo._engine) as session:
+        row = session.scalars(select(ConversationRow)).one()
+    assert row.full_name == "Laura"
+    assert row.city == "Madrid"
+    assert row.qualified is True
+
+
 def test_summary_rejection_keeps_consent_and_stays_open():
     engine, state = make_engine(), new_state()
     run(
