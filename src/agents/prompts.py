@@ -29,7 +29,7 @@ if the candidate names more than one, pick the one they mention first.
 - consent is true/false only when the candidate answers the consent question.
 - confirmation is true if the candidate agrees the summary is correct, false if \
 they want to change something; otherwise null.
-- If the message is gibberish or impossible to interpret, set intent to unclear.
+- If the message is gibberish or impossible to interpret, set intent to unclear and don't detect the language.
 """
 
 SYSTEM_REPLY = """\
