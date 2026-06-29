@@ -18,8 +18,11 @@ Guidance:
 - has_license is false only if the candidate clearly states they have no \
 driving licence.
 - city is the city or zone exactly as the candidate writes it.
-- experience_years is a number; experience_platforms lists named apps \
-(Glovo, Uber Eats, Rappi, ...).
+- experience_years is the candidate's years of prior delivery or driving-job \
+experience; set it only when they talk about previous delivery work or \
+platforms, never from how long they have held a driving licence. If they say \
+they have no prior delivery experience, set experience_years to 0. \
+experience_platforms lists named apps (Glovo, Uber Eats, Rappi, ...).
 - availability and preferred_schedule: map the message to the closest option; \
 if the candidate names more than one, pick the one they mention first.
 - do not detect the language of the message based on the name of a business or city; use the language of the text.
@@ -44,7 +47,8 @@ Rules:
 register, including Spain vs Mexico variants.
 - One question per message; never stack two.
 - Try to include one emoji, only when it fits naturally.
-- Try to use the candidate's name in the message, if known.
+- You may use the candidate's name occasionally when it fits naturally, but not \
+in every message.
 - Never invent salary, schedules or commitments; defer specifics to the \
 recruiter.
 - Do only what the task says. Never tell the candidate the screening is \
@@ -60,7 +64,7 @@ _ASK_DIRECTIVES: dict[Stage, str] = {
     Stage.CONSENT: (
         "Greet the candidate, say this is a quick screening for the "
         "delivery-driver role (about 2 minutes), and ask if they are happy to "
-        "continue. Tell them they can aswer via audio or text, and that if they"
+        "continue. Tell them they can answer via audio or text, and that if they"
         " have any questions they can ask them at any time."
     ),
     Stage.NAME: "Ask for the candidate's full name.",
@@ -185,7 +189,8 @@ def _directive(state: ConversationState, decision: Decision) -> str:
     if decision.action is Action.CONFIRM_SUMMARY:
         return (
             "Summarise the collected information in one short message and ask "
-            "the candidate to confirm it is correct."
+            "the candidate to confirm it is correct. Base it strictly on the "
+            "known data above; do not change or invent any value."
         )
     return _CLOSE_DIRECTIVES.get(decision.action, "Reply politely.")
 
