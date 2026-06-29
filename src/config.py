@@ -28,8 +28,8 @@ class Settings(BaseSettings):
     # RAG: Voyage embeddings over the Supabase pgvector knowledge base.
     voyage_api_key: str | None = None
     embedding_model: str = "voyage-3.5-lite"
-    rag_top_k: int = 4
-    rag_min_similarity: float = 0.5
+    rag_top_k: int = 5
+    rag_min_similarity: float = 0.4
 
     history_turns_in_context: int = 12
 
