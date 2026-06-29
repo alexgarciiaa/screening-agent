@@ -447,3 +447,41 @@ def test_no_retriever_means_no_context():
 
     engine = make_engine()  # retriever defaults to None
     assert engine._retrieve_context(Decision(Action.ANSWER_QUESTION), "hola") is None
+
+
+def test_question_does_not_capture_fields():
+    # A field mentioned inside a QUESTION must not be saved as the candidate's.
+    from src.agents.schemas import TurnUnderstanding
+    from src.fsm.enums import Intent, Language, Sentiment
+
+    class QuestionProvider(FakeProvider):
+        def understand(self, state):
+            return TurnUnderstanding(
+                language=Language.ES,
+                intent=Intent.QUESTION,
+                sentiment=Sentiment.NEUTRAL,
+                city="Barcelona",
+            )
+
+    state = new_state()
+    state.profile.consent = True  # past the consent gate
+    engine = ScreeningEngine(QuestionProvider())
+
+    engine.handle(state, "¿operáis en Barcelona?")
+
+    assert state.profile.city is None
+
+
+def test_question_before_consent_is_answered():
+    from src.fsm.enums import Action, Intent, Stage
+    from src.orchestrator.decision import decide
+
+    state = new_state()  # consent not given yet
+    state.last_intent = Intent.QUESTION
+    d = decide(state)
+    assert d.action is Action.ANSWER_QUESTION
+    assert d.stage is Stage.CONSENT  # answers the FAQ, then resumes by asking consent
+
+    state.last_intent = Intent.ANSWER  # a non-question still asks for consent
+    d2 = decide(state)
+    assert d2.action is Action.ASK and d2.stage is Stage.CONSENT

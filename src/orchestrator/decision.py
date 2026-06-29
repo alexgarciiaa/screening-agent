@@ -22,9 +22,6 @@ def decide(state: ConversationState) -> Decision:
         return Decision(
             Action.CLOSE_CONSENT_DECLINED, outcome=Outcome.CONSENT_DECLINED
         )
-    if profile.consent is not True:
-        return Decision(Action.ASK, stage=Stage.CONSENT)
-
     if profile.has_license is False:
         return Decision(
             Action.CLOSE_DISQUALIFIED_NO_LICENSE,
@@ -35,6 +32,16 @@ def decide(state: ConversationState) -> Decision:
 
     stage = next_missing_stage(profile)
 
+    # A question can arrive at any stage (e.g. an FAQ before consent): answer it
+    # from the knowledge base, then resume the pending stage. This sits above the
+    # consent gate so we answer the candidate instead of ignoring them, but below
+    # the hard gates so a disqualified candidate still closes.
+    if state.last_intent is Intent.QUESTION:
+        return Decision(Action.ANSWER_QUESTION, stage=stage)
+
+    if profile.consent is not True:
+        return Decision(Action.ASK, stage=Stage.CONSENT)
+
     if (
         stage is Stage.CITY
         and state.last_intent is Intent.ANSWER
@@ -44,9 +51,6 @@ def decide(state: ConversationState) -> Decision:
 
     if state.last_intent is Intent.UNCLEAR and stage is not None:
         return Decision(Action.CLARIFY, stage=stage)
-
-    if state.last_intent is Intent.QUESTION:
-        return Decision(Action.ANSWER_QUESTION, stage=stage)
 
     if stage is not None:
         return Decision(Action.ASK, stage=stage)

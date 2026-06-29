@@ -4,6 +4,7 @@ from datetime import datetime, timedelta, timezone
 
 from ..fsm.enums import (
     Action,
+    Intent,
     Language,
     Modality,
     Outcome,
@@ -120,12 +121,16 @@ class ScreeningEngine:
         state.last_sentiment = understanding.sentiment
         state.last_confirmation = understanding.confirmation
 
-        apply_understanding(
-            state.profile,
-            understanding,
-            pending=next_missing_stage(state.profile),
-        )
-        resolve_service_area(state.profile)
+        # Only capture profile fields from an actual answer. A field mentioned
+        # inside a question ("do you operate in Barcelona?") or chit-chat must
+        # not be stored as the candidate's own data.
+        if understanding.intent is Intent.ANSWER:
+            apply_understanding(
+                state.profile,
+                understanding,
+                pending=next_missing_stage(state.profile),
+            )
+            resolve_service_area(state.profile)
 
         decision = decide(state)
         state.last_asked_stage = decision.stage
