@@ -305,19 +305,10 @@ opportunistic slot-filling, bilingual ES/EN+MX, voice notes, FAQ RAG,
 re-engagement, NPS, recruiter handoff, Supabase persistence, model routing +
 Groq fallback.
 
-Designed but **not yet implemented** (honest scope cuts):
+Designed but **not yet implemented**:
 
-- **Low-confidence voice confirmation** — field-recorded audio (street noise,
-  accents) is hard, so a "I understood *Toledo* — correct?" confirmation loop is
-  important; `whisper-large-v3-turbo` doesn't expose a confidence score directly,
-  so it isn't wired yet.
-- **Auto-`abandoned` after the 2nd reminder** — a ghosting candidate currently
-  stays `in_progress`; the final transition to `abandoned` isn't automated.
 - **Attempt counter → human escalation** — after N failed clarifications on one
   field the agent should hand off to a human instead of re-asking.
-- **Eval-persona harness** — there are 32 scenario tests, but not the
-  persona-based eval suite (the "ghost", the "licence dodger", the
-  "code-switcher", the "out-of-area") against the live LLM.
 - **Funnel analytics** — beyond per-outcome rows and NPS there is no funnel /
   drop-off dashboard yet; `last_completed_stage` for abandonment analytics isn't
   surfaced.
