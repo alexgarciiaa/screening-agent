@@ -14,6 +14,7 @@ from ..fsm.enums import (
 from ..fsm.flow import Decision, next_missing_stage
 from ..fsm.models import CandidateProfile, ConversationState
 from ..agents.provider import LLMProvider
+from ..agents.retrieval import Retriever
 from .decision import decide
 from .validation import apply_understanding, resolve_service_area
 
@@ -88,9 +89,15 @@ class AgentTurn:
 
 
 class ScreeningEngine:
-    def __init__(self, provider: LLMProvider, settings: Settings) -> None:
+    def __init__(
+        self,
+        provider: LLMProvider,
+        settings: Settings,
+        retriever: Retriever | None = None,
+    ) -> None:
         self._provider = provider
         self._settings = settings
+        self._retriever = retriever
 
     def start(self, state: ConversationState) -> str:
         decision = decide(state)
@@ -136,7 +143,10 @@ class ScreeningEngine:
             decision.action in _ESCALATING_ACTIONS
             or state.last_sentiment in _ESCALATING_SENTIMENTS
         )
-        reply = self._provider.reply(state, decision, escalate=escalate)
+        context = self._retrieve_context(decision, text)
+        reply = self._provider.reply(
+            state, decision, escalate=escalate, context=context
+        )
         state.add_message("agent", reply)
 
         return AgentTurn(
@@ -145,6 +155,15 @@ class ScreeningEngine:
             outcome=state.outcome,
             finished=state.outcome in TERMINAL_OUTCOMES,
         )
+
+    def _retrieve_context(self, decision: Decision, question: str) -> str | None:
+        """Knowledge-base passages for an answerable question, or None."""
+        if self._retriever is None or decision.action is not Action.ANSWER_QUESTION:
+            return None
+        chunks = self._retriever.search(question)
+        if not chunks:
+            return None
+        return "\n\n".join(f"[{c.source}] {c.content}" for c in chunks)
 
     def follow_up(self, state: ConversationState, text: str) -> str | None:
         """Post-screening NPS, run after the screening has finished.

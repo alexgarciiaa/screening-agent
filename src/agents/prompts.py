@@ -172,9 +172,9 @@ def _directive(state: ConversationState, decision: Decision) -> str:
         pending = next_missing_stage(state.profile)
         follow_up = _ASK_DIRECTIVES.get(pending, "") if pending else ""
         return (
-            "Answer the candidate's question briefly and honestly with general "
-            "information, deferring specifics to the recruiter. Then continue: "
-            f"{follow_up}"
+            "Answer the candidate's question briefly and honestly, using the "
+            "company information provided below if available and deferring exact "
+            f"figures to the recruiter. Then continue: {follow_up}"
         )
     if decision.action is Action.CONFIRM_SUMMARY:
         return (
@@ -184,11 +184,20 @@ def _directive(state: ConversationState, decision: Decision) -> str:
     return _CLOSE_DIRECTIVES.get(decision.action, "Reply politely.")
 
 
-def reply_user_message(state: ConversationState, decision: Decision) -> str:
+def reply_user_message(
+    state: ConversationState, decision: Decision, context: str | None = None
+) -> str:
     language = "Spanish" if state.language is Language.ES else "English"
+    knowledge = (
+        "Company information you can use to answer "
+        f"(do not invent anything beyond it):\n{context}\n\n"
+        if context
+        else ""
+    )
     return (
         f"Task (do exactly this, nothing else): {_directive(state, decision)}\n\n"
         f"Already known, do not ask again: {profile_summary(state.profile)}\n\n"
+        f"{knowledge}"
         "Recent messages:\n"
         f"{format_transcript(state, limit=4)}\n\n"
         f"Write one short message in {language}."

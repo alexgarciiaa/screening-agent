@@ -409,3 +409,43 @@ def test_no_reminders_after_screening_finished():
     run(engine, state, ["si", "Pedro", "no"])  # disqualified -> terminal
     base = state.last_candidate_at or state.created_at
     assert engine.reminder(state, now=base + timedelta(days=2)) is None
+
+
+def test_reply_prompt_includes_retrieved_context():
+    from src.agents.prompts import reply_user_message
+    from src.fsm.enums import Action
+    from src.fsm.flow import Decision
+
+    state, decision = new_state(), Decision(Action.ANSWER_QUESTION)
+    with_ctx = reply_user_message(state, decision, context="[06.md] Pago quincenal.")
+    assert "Pago quincenal." in with_ctx
+    assert "Company information" in with_ctx
+    # without context there is no knowledge block
+    assert "Company information" not in reply_user_message(state, decision)
+
+
+def test_retrieve_context_only_for_questions():
+    from src.agents.retrieval import RetrievedChunk
+    from src.fsm.enums import Action, Stage
+    from src.fsm.flow import Decision
+
+    class StubRetriever:
+        def search(self, query):
+            return [RetrievedChunk("06.md", "Pagos", "Pago quincenal.", 0.9)]
+
+    engine = ScreeningEngine(
+        FakeProvider(), Settings(database_url="sqlite://"), StubRetriever()
+    )
+
+    ctx = engine._retrieve_context(Decision(Action.ANSWER_QUESTION), "¿cuándo cobro?")
+    assert ctx is not None and "Pago quincenal." in ctx
+    # a normal ASK turn does not retrieve
+    assert engine._retrieve_context(Decision(Action.ASK, stage=Stage.NAME), "Pedro") is None
+
+
+def test_no_retriever_means_no_context():
+    from src.fsm.enums import Action
+    from src.fsm.flow import Decision
+
+    engine = make_engine()  # retriever defaults to None
+    assert engine._retrieve_context(Decision(Action.ANSWER_QUESTION), "hola") is None

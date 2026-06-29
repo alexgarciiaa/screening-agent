@@ -15,7 +15,11 @@ class LLMProvider(Protocol):
     def understand(self, state: ConversationState) -> TurnUnderstanding: ...
 
     def reply(
-        self, state: ConversationState, decision: Decision, escalate: bool = False
+        self,
+        state: ConversationState,
+        decision: Decision,
+        escalate: bool = False,
+        context: str | None = None,
     ) -> str: ...
 
 
@@ -44,7 +48,11 @@ class AnthropicProvider:
         return response.parsed_output
 
     def reply(
-        self, state: ConversationState, decision: Decision, escalate: bool = False
+        self,
+        state: ConversationState,
+        decision: Decision,
+        escalate: bool = False,
+        context: str | None = None,
     ) -> str:
         model = (
             self._settings.model_reply_escalated
@@ -57,7 +65,10 @@ class AnthropicProvider:
             temperature=0.3,
             system=prompts.SYSTEM_REPLY,
             messages=[
-                {"role": "user", "content": prompts.reply_user_message(state, decision)}
+                {
+                    "role": "user",
+                    "content": prompts.reply_user_message(state, decision, context),
+                }
             ],
         )
         return "".join(b.text for b in response.content if b.type == "text").strip()
@@ -93,14 +104,21 @@ class GroqProvider:
         )
 
     def reply(
-        self, state: ConversationState, decision: Decision, escalate: bool = False
+        self,
+        state: ConversationState,
+        decision: Decision,
+        escalate: bool = False,
+        context: str | None = None,
     ) -> str:
         response = self._client.chat.completions.create(
             model=self._settings.groq_model_reply,
             temperature=0.3,
             messages=[
                 {"role": "system", "content": prompts.SYSTEM_REPLY},
-                {"role": "user", "content": prompts.reply_user_message(state, decision)},
+                {
+                    "role": "user",
+                    "content": prompts.reply_user_message(state, decision, context),
+                },
             ],
         )
         return response.choices[0].message.content.strip()
@@ -124,16 +142,24 @@ class FallbackProvider:
             return self._fallback.understand(state)
 
     def reply(
-        self, state: ConversationState, decision: Decision, escalate: bool = False
+        self,
+        state: ConversationState,
+        decision: Decision,
+        escalate: bool = False,
+        context: str | None = None,
     ) -> str:
         try:
-            return self._primary.reply(state, decision, escalate=escalate)
+            return self._primary.reply(
+                state, decision, escalate=escalate, context=context
+            )
         except Exception:
             logger.warning(
                 "Primary provider failed on reply, using fallback",
                 exc_info=True,
             )
-            return self._fallback.reply(state, decision, escalate=escalate)
+            return self._fallback.reply(
+                state, decision, escalate=escalate, context=context
+            )
 
 
 def build_provider(settings: Settings) -> LLMProvider:

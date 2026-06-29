@@ -52,7 +52,9 @@ class FakeProvider:
         self._fill_stage(next_missing_stage(state.profile), text, lowered, result)
         return result
 
-    def reply(self, state, decision, escalate: bool = False) -> str:
+    def reply(
+        self, state, decision, escalate: bool = False, context: str | None = None
+    ) -> str:
         return "(fake reply)"
 
     @staticmethod

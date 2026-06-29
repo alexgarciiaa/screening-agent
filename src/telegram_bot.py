@@ -19,6 +19,7 @@ from telegram.ext import (
 
 from .agents import stt
 from .agents.provider import build_provider
+from .agents.retrieval import build_retriever
 from .config import get_settings
 from .data import service_areas
 from .fsm.enums import Modality, Outcome
@@ -179,7 +180,9 @@ def main() -> None:
         .post_init(_announce)
         .build()
     )
-    app.bot_data["engine"] = ScreeningEngine(provider, settings)
+    app.bot_data["engine"] = ScreeningEngine(
+        provider, settings, build_retriever(settings)
+    )
     app.bot_data["repository"] = ConversationRepository(settings.database_url)
     app.bot_data["settings"] = settings
     app.add_handler(CommandHandler("start", start))
