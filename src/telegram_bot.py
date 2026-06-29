@@ -141,8 +141,8 @@ async def _reminder_loop(app) -> None:
             logger.exception("Reminder scan failed to load conversations")
             continue
         for snapshot in active:
-            chat_id = int(snapshot.candidate_id)
             try:
+                chat_id = int(snapshot.candidate_id)
                 async with _lock(chat_id):
                     state = await asyncio.to_thread(repo.get_active, snapshot.candidate_id)
                     if state is None:
@@ -153,7 +153,7 @@ async def _reminder_loop(app) -> None:
                     await app.bot.send_message(chat_id=chat_id, text=message)
                     await asyncio.to_thread(repo.save, state)
             except Exception:
-                logger.exception("Reminder failed for chat %s", chat_id)
+                logger.exception("Reminder failed for %s", snapshot.candidate_id)
 
 
 async def _announce(app) -> None:
@@ -180,9 +180,7 @@ def main() -> None:
         .post_init(_announce)
         .build()
     )
-    app.bot_data["engine"] = ScreeningEngine(
-        provider, settings, build_retriever(settings)
-    )
+    app.bot_data["engine"] = ScreeningEngine(provider, build_retriever(settings))
     app.bot_data["repository"] = ConversationRepository(settings.database_url)
     app.bot_data["settings"] = settings
     app.add_handler(CommandHandler("start", start))

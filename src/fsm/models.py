@@ -41,7 +41,6 @@ class Message(BaseModel):
     role: str
     text: str
     modality: Modality = Modality.TEXT
-    transcription_confidence: float | None = None
     timestamp: datetime = Field(default_factory=_now)
 
 
@@ -70,14 +69,12 @@ class ConversationState(BaseModel):
         role: str,
         text: str,
         modality: Modality = Modality.TEXT,
-        transcription_confidence: float | None = None,
     ) -> None:
         self.messages.append(
             Message(
                 role=role,
                 text=text,
                 modality=modality,
-                transcription_confidence=transcription_confidence,
             )
         )
         self.updated_at = _now()

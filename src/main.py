@@ -19,7 +19,7 @@ def main() -> None:
         return
     service_areas.configure(settings.database_url)
     repository = ConversationRepository(settings.database_url)
-    engine = ScreeningEngine(provider, settings, build_retriever(settings))
+    engine = ScreeningEngine(provider, build_retriever(settings))
 
     candidate_id = input("Candidate phone/id [demo]: ").strip() or "demo"
     state = repository.get_or_create(candidate_id)

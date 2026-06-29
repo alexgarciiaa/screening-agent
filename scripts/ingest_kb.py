@@ -15,7 +15,7 @@ import hashlib
 import re
 from pathlib import Path
 
-from sqlalchemy import text
+from sqlalchemy import bindparam, text
 
 from src.config import get_settings
 from src.storage.db import create_db_engine
@@ -106,7 +106,9 @@ def main() -> None:
         stale = existing - desired.keys()
         if stale:
             conn.execute(
-                text("delete from kb_chunks where content_hash = any(:hashes)"),
+                text("delete from kb_chunks where content_hash in :hashes").bindparams(
+                    bindparam("hashes", expanding=True)
+                ),
                 {"hashes": list(stale)},
             )
 

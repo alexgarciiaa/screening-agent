@@ -2,7 +2,6 @@ import re
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
-from ..config import Settings
 from ..fsm.enums import (
     Action,
     Language,
@@ -90,13 +89,9 @@ class AgentTurn:
 
 class ScreeningEngine:
     def __init__(
-        self,
-        provider: LLMProvider,
-        settings: Settings,
-        retriever: Retriever | None = None,
+        self, provider: LLMProvider, retriever: Retriever | None = None
     ) -> None:
         self._provider = provider
-        self._settings = settings
         self._retriever = retriever
 
     def start(self, state: ConversationState) -> str:
@@ -111,12 +106,11 @@ class ScreeningEngine:
         state: ConversationState,
         text: str,
         modality: Modality = Modality.TEXT,
-        transcription_confidence: float | None = None,
     ) -> AgentTurn:
         if state.outcome in TERMINAL_OUTCOMES:
             return AgentTurn(reply="", outcome=state.outcome, finished=True)
 
-        state.add_message("candidate", text, modality, transcription_confidence)
+        state.add_message("candidate", text, modality)
         state.last_candidate_at = datetime.now(timezone.utc)
         state.reminders_sent = 0
 

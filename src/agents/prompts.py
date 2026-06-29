@@ -55,7 +55,8 @@ _ASK_DIRECTIVES: dict[Stage, str] = {
     Stage.CONSENT: (
         "Greet the candidate, say this is a quick screening for the "
         "delivery-driver role (about 2 minutes), and ask if they are happy to "
-        "continue."
+        "continue. Tell them they can aswer via audio or text, and that if they"
+        " have any questions they can ask them at any time."
     ),
     Stage.NAME: "Ask for the candidate's full name.",
     Stage.LICENSE: "Ask whether the candidate holds a valid driving licence.",
@@ -68,7 +69,7 @@ _ASK_DIRECTIVES: dict[Stage, str] = {
     ),
     Stage.EXPERIENCE: (
         "Ask about prior delivery experience: how many years and on which "
-        "platforms (Glovo, Uber Eats, Rappi...)."
+        "platforms (Glovo, Uber Eats, Rappi, Doordash, Deliveroo...)."
     ),
     Stage.START_DATE: "Ask when the candidate could start.",
 }

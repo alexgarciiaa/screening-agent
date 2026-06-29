@@ -10,7 +10,7 @@ from src.storage.repository import ConversationRepository
 
 def make_engine() -> ScreeningEngine:
     settings = Settings(anthropic_api_key=None, database_url="sqlite://")
-    return ScreeningEngine(FakeProvider(settings), settings)
+    return ScreeningEngine(FakeProvider(settings))
 
 
 def new_state() -> ConversationState:
@@ -433,9 +433,7 @@ def test_retrieve_context_only_for_questions():
         def search(self, query):
             return [RetrievedChunk("06.md", "Pagos", "Pago quincenal.", 0.9)]
 
-    engine = ScreeningEngine(
-        FakeProvider(), Settings(database_url="sqlite://"), StubRetriever()
-    )
+    engine = ScreeningEngine(FakeProvider(), StubRetriever())
 
     ctx = engine._retrieve_context(Decision(Action.ANSWER_QUESTION), "¿cuándo cobro?")
     assert ctx is not None and "Pago quincenal." in ctx
