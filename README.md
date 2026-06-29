@@ -29,17 +29,20 @@ deterministically, and leave the recruiter only valid candidates.
 
 Each turn is **two LLM calls with a deterministic controller in between**:
 
-```
-candidate message
-        │
-        ▼
-1. UNDERSTAND  (LLM → structured data: language, intent, sentiment, fields)
-        │
-        ▼
-2. DECIDE      (deterministic Python FSM: what to ask next, what to validate, which gate applies)
-        │
-        ▼
-3. REPLY       (LLM → writes ONE message, bound to the decision)
+```mermaid
+flowchart TD
+    A(["Candidate message<br/>text or voice"]) --> B{Voice note?}
+    B -- yes --> C["Transcribe<br/>Groq Whisper"]
+    B -- no --> D["UNDERSTAND<br/>LLM: language, intent,<br/>sentiment, fields"]
+    C --> D
+    D --> E["Apply and validate<br/>opportunistic slot-filling"]
+    E --> F["DECIDE<br/>deterministic FSM"]
+    F --> G{Question?}
+    G -- yes --> H["Retrieve FAQ<br/>Voyage + pgvector"]
+    G -- no --> I["REPLY<br/>LLM: one message,<br/>bound to the decision"]
+    H --> I
+    I --> J[("Persist state<br/>Supabase")]
+    J --> K(["Send reply"])
 ```
 
 The LLM only understands language and writes prose; **what to do next is decided
@@ -49,20 +52,36 @@ gate.
 
 ### Screening flow
 
-```
-0. CONSENT ──────────(declines)─────────────► consent_declined
-       │ yes
-1. FULL NAME
-2. DRIVING LICENCE ──(no)────────────────────► disqualified_no_license
-       │ yes
-3. CITY / ZONE ──────(out of service area)───► out_of_area  (waitlist)
-       │ in area
-4. AVAILABILITY
-5. PREFERRED SCHEDULE
-6. EXPERIENCE
-7. START DATE
-       ▼
-8. SUMMARY + CONFIRMATION ────────────────────► qualified → recruiter handoff
+```mermaid
+stateDiagram-v2
+    [*] --> CONSENT
+    CONSENT --> NAME: consents
+    NAME --> LICENSE
+    LICENSE --> CITY: has licence
+    CITY --> AVAILABILITY: in service area
+    AVAILABILITY --> SCHEDULE
+    SCHEDULE --> EXPERIENCE
+    EXPERIENCE --> START_DATE
+    START_DATE --> SUMMARY
+    SUMMARY --> qualified: confirms
+    SUMMARY --> SUMMARY: not correct (ask what to change)
+
+    CONSENT --> consent_declined: declines
+    LICENSE --> disqualified_no_license: no licence
+    CITY --> out_of_area: outside service area
+
+    qualified --> [*]
+    consent_declined --> [*]
+    disqualified_no_license --> [*]
+    out_of_area --> [*]
+
+    note right of CONSENT
+        Cross-cutting, at any stage:
+        stop -> opted_out
+        question -> FAQ (RAG) then resume
+        unclear -> re-ask (clarify)
+        silence -> reminder at 2h / 24h
+    end note
 ```
 
 **Hard gates (licence and city) come early**: a candidate who cannot qualify is
@@ -99,6 +118,43 @@ interrogation.
 - **GDPR**: explicit consent up front; only what the screening needs is collected.
 
 ## Architecture & design decisions
+
+```mermaid
+flowchart LR
+    TG(["Telegram<br/>chat / voice"]) <--> BOT
+
+    subgraph Service["Screening service on Render"]
+        BOT["telegram_bot<br/>webhook"] --> ENG[ScreeningEngine]
+        BOT --> STT["STT adapter"]
+        ENG --> DEC["FSM decide()"]
+        ENG --> PROV["LLM provider"]
+        ENG --> RET[Retriever]
+        REM["Reminder loop<br/>2h / 24h"]
+    end
+
+    subgraph Ext["External APIs"]
+        ANTH["Anthropic Claude"]
+        GROQ["Groq<br/>fallback + Whisper"]
+        VOY["Voyage embeddings"]
+    end
+
+    subgraph DB["Supabase Postgres"]
+        CONV[("conversations")]
+        AREAS[("service_areas")]
+        KB[("kb_chunks<br/>pgvector")]
+    end
+
+    PROV --> ANTH
+    PROV --> GROQ
+    STT --> GROQ
+    RET --> VOY
+    RET --> KB
+    BOT --> CONV
+    ENG --> AREAS
+    REM --> CONV
+    REM --> TG
+    KBDOCS["knowledge_base/*.md"] -. ingest_kb .-> KB
+```
 
 - **Deterministic FSM + generative surface.** The controller (`orchestrator/decision.py`)
   is plain, testable Python with no LLM on the control path. The LLM is confined to
