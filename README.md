@@ -244,7 +244,7 @@ src/
 scripts/
   ingest_kb.py    ingest the knowledge base into pgvector
 knowledge_base/   12 source documents for the RAG FAQ
-tests/            30 deterministic tests (no network, FakeProvider double)
+tests/            32 deterministic tests (no network, FakeProvider double)
 ```
 
 ## Getting started
@@ -315,7 +315,7 @@ Designed but **not yet implemented** (honest scope cuts):
   stays `in_progress`; the final transition to `abandoned` isn't automated.
 - **Attempt counter → human escalation** — after N failed clarifications on one
   field the agent should hand off to a human instead of re-asking.
-- **Eval-persona harness** — there are 30 scenario tests, but not the
+- **Eval-persona harness** — there are 32 scenario tests, but not the
   persona-based eval suite (the "ghost", the "licence dodger", the
   "code-switcher", the "out-of-area") against the live LLM.
 - **Funnel analytics** — beyond per-outcome rows and NPS there is no funnel /
