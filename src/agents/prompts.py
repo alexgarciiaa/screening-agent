@@ -20,6 +20,7 @@ driving licence.
 - city is the city or zone exactly as the candidate writes it.
 - experience_years is a number; experience_platforms lists named apps \
 (Glovo, Uber Eats, Rappi, ...).
+- do not detect the language of the message based on the name of a business or city; use the language of the text.
 - consent is true/false only when the candidate answers the consent question.
 - confirmation is true if the candidate agrees the summary is correct, false if \
 they want to change something; otherwise null.
@@ -180,13 +181,6 @@ def _directive(state: ConversationState, decision: Decision) -> str:
             "Summarise the collected information in one short message and ask "
             "the candidate to confirm it is correct."
         )
-    if decision.action is Action.ASK_NPS:
-        return (
-            "Thank the candidate for their message, then ask them, on a scale "
-            "of 1 to 10, how their experience with this screening was."
-        )
-    if decision.action is Action.CLOSE_NPS:
-        return "Thank the candidate warmly for their feedback and wish them well."
     return _CLOSE_DIRECTIVES.get(decision.action, "Reply politely.")
 
 

@@ -22,7 +22,7 @@ class Settings(BaseSettings):
 
     # Groq fallback (used only if Anthropic fails).
     groq_model_understand: str = "openai/gpt-oss-120b"
-    groq_model_reply: str = "openai/gpt-oss-20b"
+    groq_model_reply: str = "openai/gpt-oss-120b"
     groq_stt_model: str = "whisper-large-v3-turbo"
 
     history_turns_in_context: int = 12

@@ -325,6 +325,21 @@ def test_nps_followup_after_finish():
     assert engine.follow_up(state, "vale, adios") is None
 
 
+def test_nps_out_of_range_is_reasked():
+    engine, state = make_engine(), new_state()
+    run(engine, state, ["si", "Pedro", "no"])
+
+    engine.follow_up(state, "gracias")
+    again = engine.follow_up(state, "un 12")  # out of range
+    assert again is not None
+    assert state.nps_score is None
+    assert state.nps_done is False
+
+    engine.follow_up(state, "pues un 9")
+    assert state.nps_score == 9
+    assert state.nps_done is True
+
+
 def test_nps_classification():
     from src.fsm.enums import NpsCategory, classify_nps
 
@@ -351,3 +366,46 @@ def test_nps_category_stored_for_dashboard(tmp_path):
         row = session.scalars(select(ConversationRow)).one()
     assert row.nps == 9
     assert row.nps_category == "promoter"
+
+
+def test_reminders_fire_after_2h_and_24h():
+    from datetime import timedelta
+
+    engine, state = make_engine(), new_state()
+    engine.start(state)
+    engine.handle(state, "hola")  # candidate active; starts the silence clock
+    base = state.last_candidate_at
+    assert base is not None
+
+    assert engine.reminder(state, now=base + timedelta(minutes=30)) is None
+    assert engine.reminder(state, now=base + timedelta(hours=2, minutes=1)) is not None
+    assert state.reminders_sent == 1
+    # already sent; not repeated before the next threshold
+    assert engine.reminder(state, now=base + timedelta(hours=5)) is None
+    assert engine.reminder(state, now=base + timedelta(hours=24, minutes=1)) is not None
+    assert state.reminders_sent == 2
+    # only two nudges, ever
+    assert engine.reminder(state, now=base + timedelta(days=5)) is None
+
+
+def test_reminders_reset_when_candidate_replies():
+    from datetime import timedelta
+
+    engine, state = make_engine(), new_state()
+    engine.start(state)
+    engine.handle(state, "hola")
+    base = state.last_candidate_at
+    engine.reminder(state, now=base + timedelta(hours=2, minutes=1))
+    assert state.reminders_sent == 1
+
+    engine.handle(state, "si")  # candidate comes back -> clock resets
+    assert state.reminders_sent == 0
+
+
+def test_no_reminders_after_screening_finished():
+    from datetime import timedelta
+
+    engine, state = make_engine(), new_state()
+    run(engine, state, ["si", "Pedro", "no"])  # disqualified -> terminal
+    base = state.last_candidate_at or state.created_at
+    assert engine.reminder(state, now=base + timedelta(days=2)) is None

@@ -21,7 +21,7 @@ from .agents import stt
 from .agents.provider import build_provider
 from .config import get_settings
 from .data import service_areas
-from .fsm.enums import Modality
+from .fsm.enums import Modality, Outcome
 from .orchestrator.engine import ScreeningEngine
 from .orchestrator.handoff import build_handoff
 from .storage.repository import ConversationRepository
@@ -125,9 +125,40 @@ async def on_voice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.message.reply_text(reply)
 
 
+_REMINDER_SCAN_SECONDS = 600
+
+
+async def _reminder_loop(app) -> None:
+    """Nudge candidates who went quiet mid-screening (after 2h and 24h)."""
+    engine: ScreeningEngine = app.bot_data["engine"]
+    repo: ConversationRepository = app.bot_data["repository"]
+    while True:
+        await asyncio.sleep(_REMINDER_SCAN_SECONDS)
+        try:
+            active = await asyncio.to_thread(repo.list_by_outcome, Outcome.IN_PROGRESS)
+        except Exception:
+            logger.exception("Reminder scan failed to load conversations")
+            continue
+        for snapshot in active:
+            chat_id = int(snapshot.candidate_id)
+            try:
+                async with _lock(chat_id):
+                    state = await asyncio.to_thread(repo.get_active, snapshot.candidate_id)
+                    if state is None:
+                        continue
+                    message = engine.reminder(state)
+                    if message is None:
+                        continue
+                    await app.bot.send_message(chat_id=chat_id, text=message)
+                    await asyncio.to_thread(repo.save, state)
+            except Exception:
+                logger.exception("Reminder failed for chat %s", chat_id)
+
+
 async def _announce(app) -> None:
     me = await app.bot.get_me()
     logger.info("Bot @%s is live: https://t.me/%s", me.username, me.username)
+    app.create_task(_reminder_loop(app))
 
 
 def main() -> None:

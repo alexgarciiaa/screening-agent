@@ -117,7 +117,10 @@ class FallbackProvider:
         try:
             return self._primary.understand(state)
         except Exception:
-            logger.warning("Primary provider failed on understand, using fallback")
+            logger.warning(
+                "Primary provider failed on understand, using fallback",
+                exc_info=True,
+            )
             return self._fallback.understand(state)
 
     def reply(
@@ -126,7 +129,10 @@ class FallbackProvider:
         try:
             return self._primary.reply(state, decision, escalate=escalate)
         except Exception:
-            logger.warning("Primary provider failed on reply, using fallback")
+            logger.warning(
+                "Primary provider failed on reply, using fallback",
+                exc_info=True,
+            )
             return self._fallback.reply(state, decision, escalate=escalate)
 
 

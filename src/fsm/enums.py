@@ -61,8 +61,6 @@ class Action(str, Enum):
     CLOSE_OUT_OF_AREA = "close_out_of_area"
     CLOSE_CONSENT_DECLINED = "close_consent_declined"
     CLOSE_OPTED_OUT = "close_opted_out"
-    ASK_NPS = "ask_nps"
-    CLOSE_NPS = "close_nps"
 
 
 class Outcome(str, Enum):

@@ -1,16 +1,18 @@
 import re
 from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
 
 from ..config import Settings
 from ..fsm.enums import (
     Action,
+    Language,
     Modality,
     Outcome,
     Sentiment,
     TERMINAL_OUTCOMES,
 )
 from ..fsm.flow import Decision, next_missing_stage
-from ..fsm.models import ConversationState
+from ..fsm.models import CandidateProfile, ConversationState
 from ..agents.provider import LLMProvider
 from .decision import decide
 from .validation import apply_understanding, resolve_service_area
@@ -19,6 +21,57 @@ _ESCALATING_SENTIMENTS = {Sentiment.FRUSTRATED, Sentiment.CONFUSED}
 _ESCALATING_ACTIONS = {Action.CONFIRM_SUMMARY, Action.CLOSE_QUALIFIED}
 
 _NPS_RE = re.compile(r"\b(10|[0-9])\b")
+
+_NPS_QUESTION = {
+    Language.ES: (
+        "¡Gracias a ti! 🙏 Una última cosa: del 0 al 10, "
+        "¿qué te ha parecido el proceso de selección?"
+    ),
+    Language.EN: (
+        "Thank you! 🙏 One last thing: from 0 to 10, "
+        "how would you rate this screening experience?"
+    ),
+}
+_NPS_THANKS = {
+    Language.ES: "¡Gracias por tu valoración{name}! Nos ayuda a mejorar. 🙌",
+    Language.EN: "Thanks for your rating{name}! It helps us improve. 🙌",
+}
+_NPS_RETRY = {
+    Language.ES: "Solo necesito un número del 0 al 10 🙂 ¿Cómo valorarías el proceso?",
+    Language.EN: "I just need a number from 0 to 10 🙂 How would you rate the process?",
+}
+
+# Nudges for a candidate who goes quiet mid-screening: after 2h and 24h of
+# silence. Same fixed-template approach as the NPS messages.
+_REMINDER_DELAYS = (timedelta(hours=2), timedelta(hours=24))
+_REMINDER_MESSAGES = (
+    {
+        Language.ES: (
+            "¡Hola{name}! 👋 ¿Seguimos con tu solicitud en Grupo Sazón? "
+            "Podemos retomarla donde la dejaste cuando quieras."
+        ),
+        Language.EN: (
+            "Hi{name}! 👋 Shall we continue your application with Grupo Sazón? "
+            "We can pick up right where you left off whenever you're ready."
+        ),
+    },
+    {
+        Language.ES: (
+            "¡Hola de nuevo{name}! Tu solicitud sigue abierta. Si quieres "
+            "continuar, solo responde a este mensaje 🙂"
+        ),
+        Language.EN: (
+            "Hi again{name}! Your application is still open. If you'd like to "
+            "continue, just reply to this message 🙂"
+        ),
+    },
+)
+
+
+def _name_suffix(profile: CandidateProfile) -> str:
+    """', <first name>' when the name is known, else '' — for greeting templates."""
+    first = (profile.full_name or "").split(" ")[0]
+    return f", {first}" if first else ""
 
 
 def _parse_nps(text: str) -> int | None:
@@ -57,6 +110,8 @@ class ScreeningEngine:
             return AgentTurn(reply="", outcome=state.outcome, finished=True)
 
         state.add_message("candidate", text, modality, transcription_confidence)
+        state.last_candidate_at = datetime.now(timezone.utc)
+        state.reminders_sent = 0
 
         understanding = self._provider.understand(state)
         state.language = understanding.language
@@ -92,21 +147,49 @@ class ScreeningEngine:
         )
 
     def follow_up(self, state: ConversationState, text: str) -> str | None:
-        """Post-screening NPS: thank the candidate and ask for a 1-10 score.
+        """Post-screening NPS, run after the screening has finished.
 
-        Runs after the screening has finished. Returns a reply, or None once the
-        feedback step is over.
+        The candidate's first message triggers the rating question; the next is
+        read as the score (0-10). An out-of-range or missing number is re-asked.
+        Returns the message to send, or None once a score has been recorded.
         """
         if state.nps_done:
             return None
         state.add_message("candidate", text)
         if not state.nps_asked:
             state.nps_asked = True
-            decision = Decision(Action.ASK_NPS)
+            reply = _NPS_QUESTION[state.language]
         else:
-            state.nps_score = _parse_nps(text)
-            state.nps_done = True
-            decision = Decision(Action.CLOSE_NPS)
-        reply = self._provider.reply(state, decision)
+            score = _parse_nps(text)
+            if score is None:
+                # Out of range or no number: stay here and ask once more.
+                reply = _NPS_RETRY[state.language]
+            else:
+                state.nps_score = score
+                state.nps_done = True
+                reply = _NPS_THANKS[state.language].format(
+                    name=_name_suffix(state.profile)
+                )
         state.add_message("agent", reply)
         return reply
+
+    def reminder(
+        self, state: ConversationState, now: datetime | None = None
+    ) -> str | None:
+        """Next nudge for a silent in-progress candidate, or None.
+
+        Reminders fire 2h and 24h after the candidate's last message. Calling
+        this advances the counter so each nudge is sent once; the counter resets
+        when the candidate replies (see handle).
+        """
+        now = now or datetime.now(timezone.utc)
+        sent = state.reminders_sent
+        if state.outcome is not Outcome.IN_PROGRESS or sent >= len(_REMINDER_DELAYS):
+            return None
+        baseline = state.last_candidate_at or state.created_at
+        if now - baseline < _REMINDER_DELAYS[sent]:
+            return None
+        state.reminders_sent = sent + 1
+        return _REMINDER_MESSAGES[sent][state.language].format(
+            name=_name_suffix(state.profile)
+        )

@@ -60,6 +60,8 @@ class ConversationState(BaseModel):
     nps_asked: bool = False
     nps_done: bool = False
     nps_score: int | None = None
+    last_candidate_at: datetime | None = None
+    reminders_sent: int = 0
     created_at: datetime = Field(default_factory=_now)
     updated_at: datetime = Field(default_factory=_now)
 
